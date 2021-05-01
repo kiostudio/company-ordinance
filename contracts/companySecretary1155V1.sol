@@ -4,6 +4,4 @@ import "hardhat/console.sol";
 
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/presets/ERC1155PresetMinterPauserUpgradeable.sol";
 
-contract CompanySecretary1155V1 is ERC1155PresetMinterPauserUpgradeable {
-    
-}
+contract CompanySecretary1155V1 is ERC1155PresetMinterPauserUpgradeable {}

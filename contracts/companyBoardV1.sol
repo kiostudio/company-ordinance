@@ -3,69 +3,97 @@ pragma solidity ^0.8.0;
 import "hardhat/console.sol";
 // import "@openzeppelin/contracts/access/Ownable.sol";
 // import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
-import "./erc20Upgradeable.sol";
+import "./sharesIssuerV1.sol";
+import "./sharesIssuerFactoryCloneV1.sol";
 // import "@openzeppelin/contracts-upgradeable/token/ERC20/presets/ERC20PresetMinterPauserUpgradeable.sol";
 
-contract CompanyBoard is AccessControlEnumerable {
+contract CompanyBoardV1 is AccessControlEnumerable, Initializable {
     bytes32 public constant BOARD_MEMBER_ROLE = keccak256("BOARD_MEMBER_ROLE");
     bytes32 public constant COMPANY_MODERATOR_ROLE = keccak256("COMPANY_MODERATOR_ROLE");
-    struct Share {
-        address delegate;
-        uint share;
-    }
-    mapping (address => Share) public sharesDist;
-    address [] public shareHoldersList;
-    bool private init = false;
-    address private shareIssuerAddress;
+    // struct Share {
+    //     address delegate;
+    //     uint share;
+    // }
+    // mapping (address => Share) public sharesDist;
+    // address [] public shareHoldersList;
+    // bool private init = false;
+    address public sharesIssuerAddress;
     bytes32 public companyType = keccak256("PRIVATE");
 
-    constructor(address[] memory _boardMembers, uint256[] memory shares){
+    // constructor(address[] memory boardMembers, uint256[] memory shares, string memory name, string memory symbol, address factoryAddress){
+    //     console.log("Contract Deployer : ",msg.sender);
+    //     // _setupRole(keccak256("DEFAULT_ADMIN_ROLE"), msg.sender);
+    //     _setBoardMembers(boardMembers,shares);
+    //     _setupRole(COMPANY_MODERATOR_ROLE, msg.sender);
+    //     _createSharesIssuer(name,symbol,factoryAddress,boardMembers,shares);
+    // }
+
+    function initialize(address[] memory boardMembers, uint256[] memory shares, string memory name, string memory symbol, address factoryAddress) public initializer {
         console.log("Contract Deployer : ",msg.sender);
         // _setupRole(keccak256("DEFAULT_ADMIN_ROLE"), msg.sender);
-        _setBoardMembers(_boardMembers,shares);
-        _setupRole(COMPANY_MODERATOR_ROLE, msg.sender);
+        _setBoardMembers(boardMembers);
+        // _setupRole(COMPANY_MODERATOR_ROLE, msg.sender);
+        _createSharesIssuer(name,symbol,factoryAddress,boardMembers,shares);
     }
-    function _setBoardMembers(address[] memory _boardMembers, uint256[] memory shares) internal{
-        for(uint256 i = 0; i < _boardMembers.length; i++) {
-            console.log("Add New Board Member : ",_boardMembers[i],shares[i]);
-            // grantRole(BOARD_MEMBER_ROLE, _boardMembers[i]);
-            _setupRole(BOARD_MEMBER_ROLE, _boardMembers[i]);
-            shareHoldersList.push(_boardMembers[i]);
-            sharesDist[_boardMembers[i]].share = shares[i];
+    function _setBoardMembers(address[] memory boardMembers) internal{
+        for(uint256 i = 0; i < boardMembers.length; i++) {
+            console.log("Add New Board Member Role : ",boardMembers[i]);
+            // grantRole(BOARD_MEMBER_ROLE, boardMembers[i]);
+            _setupRole(BOARD_MEMBER_ROLE, boardMembers[i]);
+            // shareHoldersList.push(boardMembers[i]);
+            // sharesDist[boardMembers[i]].share = shares[i];
         }
-        // boardMembers = _boardMembers;
+        // boardMembers = boardMembers;
     }
-    function setShareIssuer(address _shareIssuerAddress) external{
-        require(hasRole(COMPANY_MODERATOR_ROLE, msg.sender), "Caller is not a Moderator");
-        shareIssuerAddress = _shareIssuerAddress;
-        renounceRole(COMPANY_MODERATOR_ROLE, msg.sender);
-    }
-    function initSharesIssue() external returns (uint) {
-        // console.log('sharesIssuer Address :',shareIssuerAddress);
-        require(init == false,"Init Share already issued.");
-        require(shareIssuerAddress != 0x0000000000000000000000000000000000000000,"Share Issuer not yet already.");
-        uint totalMembers = getRoleMemberCount(BOARD_MEMBER_ROLE);
-        console.log('Number of Board Members :',totalMembers);
-        console.log('sharesIssuer Address :',shareIssuerAddress);
-        console.log(Address.isContract(shareIssuerAddress));
-        for(uint256 i = 0; i < shareHoldersList.length; i++) {
-            ERC20Mint shareInstance = ERC20Mint(shareIssuerAddress);
-            console.log('This shareholders proportions : ',sharesDist[shareHoldersList[i]].share);
-            shareInstance.mint(shareHoldersList[i], sharesDist[shareHoldersList[i]].share);
+    function _createSharesIssuer(string memory name, string memory symbol, address factoryAddress,address[] memory boardMembers, uint256[] memory shares) internal{
+        console.log("Create Shares Issuer : " ,name, symbol, factoryAddress);
+        console.log("This Contract Address : ",address(this));
+        SharesIssuerFactoryCloneV1 shareIssuerFactoryInstance = SharesIssuerFactoryCloneV1(factoryAddress);
+        address _sharesIssuerAddress = shareIssuerFactoryInstance.createShareIssuer(name, symbol, address(this));
+        console.log("Shares Issuer Address",_sharesIssuerAddress);
+        sharesIssuerAddress = _sharesIssuerAddress;
+        for(uint256 i = 0; i < boardMembers.length; i++) {
+            console.log("Issue Shares : ",boardMembers[i],shares[i]);
+            SharesIssuerV1 sharesInstance = SharesIssuerV1(_sharesIssuerAddress);
+            // console.log('This shareholders proportions : ',sharesDist[shareHoldersList[i]].share);
+            sharesInstance.mint(boardMembers[i], shares[i]);
         }
-        init = true;
-        return totalMembers;
     }
-    function getVotingWeight(address member, address sharesIssuer) external view returns(uint256){
-        require(hasRole(BOARD_MEMBER_ROLE, msg.sender), "Caller is not a Board Memeber");
-        console.log('Shares Belong to the Board Memeber : ',ERC20Mint(sharesIssuer).balanceOf(member));
-        console.log('Total Sahres Issued : ',ERC20Mint(sharesIssuer).totalSupply());
-        uint quotient = uint(ERC20Mint(sharesIssuer).balanceOf(member))*(10*10000)/uint(ERC20Mint(sharesIssuer).totalSupply());
-        console.log('Member Weight : ',quotient);
-        return quotient;
-    }
+    // function getSharesIssuerAddress() external view returns(address) {
+    //     return sharesIssuerAddress;
+    // }
+    // function setShareIssuer(address _shareIssuerAddress) external{
+    //     require(hasRole(COMPANY_MODERATOR_ROLE, msg.sender), "Caller is not a Moderator");
+    //     shareIssuerAddress = _shareIssuerAddress;
+    //     renounceRole(COMPANY_MODERATOR_ROLE, msg.sender);
+    // }
+    // function initSharesIssue() external returns (uint) {
+    //     // console.log('sharesIssuer Address :',shareIssuerAddress);
+    //     require(init == false,"Init Share already issued.");
+    //     require(shareIssuerAddress != 0x0000000000000000000000000000000000000000,"Share Issuer not yet already.");
+    //     uint totalMembers = getRoleMemberCount(BOARD_MEMBER_ROLE);
+    //     console.log('Number of Board Members :',totalMembers);
+    //     console.log('sharesIssuer Address :',shareIssuerAddress);
+    //     console.log(Address.isContract(shareIssuerAddress));
+    //     for(uint256 i = 0; i < shareHoldersList.length; i++) {
+    //         ERC20Mint shareInstance = ERC20Mint(shareIssuerAddress);
+    //         console.log('This shareholders proportions : ',sharesDist[shareHoldersList[i]].share);
+    //         shareInstance.mint(shareHoldersList[i], sharesDist[shareHoldersList[i]].share);
+    //     }
+    //     init = true;
+    //     return totalMembers;
+    // }
+    // function getVotingWeight(address member, address sharesIssuer) external view returns(uint256){
+    //     require(hasRole(BOARD_MEMBER_ROLE, msg.sender), "Caller is not a Board Memeber");
+    //     console.log('Shares Belong to the Board Memeber : ',ERC20Mint(sharesIssuer).balanceOf(member));
+    //     console.log('Total Sahres Issued : ',ERC20Mint(sharesIssuer).totalSupply());
+    //     uint quotient = uint(ERC20Mint(sharesIssuer).balanceOf(member))*(10*10000)/uint(ERC20Mint(sharesIssuer).totalSupply());
+    //     console.log('Member Weight : ',quotient);
+    //     return quotient;
+    // }
     // Proposal
     /**
      * @dev Grants `DEFAULT_ADMIN_ROLE`, `MINTER_ROLE` and `PAUSER_ROLE` to the
@@ -73,11 +101,13 @@ contract CompanyBoard is AccessControlEnumerable {
      *
      * See {ERC20-constructor}.
      */
-    function initProposal() external{
-        require(hasRole(BOARD_MEMBER_ROLE, msg.sender), "Caller is not a Board Memeber");
-    }
+    // function initProposal() external{
+    //     require(hasRole(BOARD_MEMBER_ROLE, msg.sender), "Caller is not a Board Memeber");
+    // }
     // Vote
     // Result
+
+    // Voting Power Delegation
 
     // Shares Dilution
     // Company Liquidation
