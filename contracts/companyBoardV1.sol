@@ -13,15 +13,30 @@ import "./sharesIssuerFactoryCloneV1.sol";
 contract CompanyBoardV1 is AccessControlEnumerable, Initializable {
     bytes32 public constant BOARD_MEMBER_ROLE = keccak256("BOARD_MEMBER_ROLE");
     bytes32 public constant COMPANY_MODERATOR_ROLE = keccak256("COMPANY_MODERATOR_ROLE");
-    // struct Share {
-    //     address delegate;
-    //     uint share;
-    // }
-    // mapping (address => Share) public sharesDist;
-    // address [] public shareHoldersList;
     address public sharesIssuerAddress;
     address public companySecrectaryAddress;
     bytes32 public companyType = keccak256("PRIVATE");
+
+    struct Voter {
+        uint weight; // weight is accumulated by delegation
+        address delegate; // person delegated to
+        uint vote;   // index of the voted proposal
+    }
+    struct Proposal {
+        uint id;
+        bytes32 status;
+        uint voteCount;
+        uint voteOptions;
+        uint256 voteEnd;
+        uint passRate;
+        uint actionIndex;
+        uint timelock;
+        address secrectaryAddress;
+        mapping(address => Voter) voters;
+    }
+    Proposal [] private Proposals;
+    // mapping (bytes32 => Proposal) proposals;
+
     function initialize(address[] memory boardMembers, uint256[] memory shares, string memory name, string memory symbol, address factoryAddress) public initializer {
         console.log("Contract Deployer : ",msg.sender);
         // _setupRole(keccak256("DEFAULT_ADMIN_ROLE"), msg.sender);
@@ -69,16 +84,57 @@ contract CompanyBoardV1 is AccessControlEnumerable, Initializable {
      */
     // Governance
     // Proposal - For each proposal register as a NFT
-        // - Content : Tile / Description / Attachment (metadata)
+        // - Content : Tile / Description / Attachment / Vote Options (metadata)
         // - Passing Rate
         // - Voting Time : Limit + Instant Pass
         // - Blind Voting
+        // - Action
         // - Execution Time
         // - Yes / No Option
-    // function initProposal(uint proposalId, address secrectaryAddress) external returns(bool){
-    //     require(hasRole(BOARD_MEMBER_ROLE, msg.sender), "Caller is not a Board Memeber");
-    //     return true;
-    // }
+    function initProposal(uint proposalId, address secrectaryAddress, uint voteOptions, uint voteTime, uint passRate, uint actionIndex, uint timelock) external{
+        require(hasRole(BOARD_MEMBER_ROLE, msg.sender), "Caller is not a Board Memeber");
+        Proposal storage proposal = Proposals[Proposals.length+1];
+        proposal.id = proposalId;
+        proposal.status = "open";
+        proposal.voteCount = 0;
+        proposal.voteOptions = voteOptions;
+        proposal.voteEnd = block.timestamp + voteTime * 1 days;
+        proposal.passRate = passRate;
+        proposal.actionIndex = actionIndex;
+        proposal.timelock = timelock;
+        proposal.secrectaryAddress = secrectaryAddress;
+    }
+
+    function vote(uint proposalId, address secrectaryAddress, uint voteIndex) external{
+        require(hasRole(BOARD_MEMBER_ROLE, msg.sender), "Caller is not a Board Memeber");
+        for(uint256 i = 0; i < Proposals.length; i++) {
+            if(Proposals[i].id == proposalId && Proposals[i].secrectaryAddress == secrectaryAddress){
+                require(voteIndex <= Proposals[i].voteOptions, "Vote option is not valid");
+                SharesIssuerV1 sharesInstance = SharesIssuerV1(sharesIssuerAddress);  
+                uint voterWeight = uint(sharesInstance.balanceOf(msg.sender));
+                Proposals[i].voteCount = Proposals[i].voteCount + voterWeight;
+                Voter storage voter = Proposals[i].voters[msg.sender]; 
+                voter.vote = voteIndex;
+                voter.delegate = msg.sender;
+                voter.weight = voterWeight;               
+                // Proposals[i].voters[msg.sender] = Voter({
+                //     vote: voteIndex,
+                //     delegate: msg.sender,
+                //     weight: voterWeight
+                // });
+            }
+        }
+        // Voter storage sender = voters[msg.sender];
+        // require(sender.weight != 0, "Has no right to vote");
+        // require(!sender.voted, "Already voted.");
+        // sender.voted = true;
+        // sender.vote = proposal;
+
+        // // If `proposal` is out of the range of the array,
+        // // this will throw automatically and revert all
+        // // changes.
+        // proposals[proposal].voteCount += sender.weight;
+    }
 
     // Vote : for a specific proposal : proposalId
         // Checking : 
