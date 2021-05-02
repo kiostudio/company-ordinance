@@ -43,7 +43,9 @@ module.exports = {
     }
   },
   gasReporter : {
-    enabled : true
+    enabled : true,
+    currency : 'HKD',
+    coinmarketcap : 'd257db5e-d4f5-4e47-8b93-b0d38c0c076b'
   }
 };
 

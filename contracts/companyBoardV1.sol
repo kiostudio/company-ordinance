@@ -19,18 +19,9 @@ contract CompanyBoardV1 is AccessControlEnumerable, Initializable {
     // }
     // mapping (address => Share) public sharesDist;
     // address [] public shareHoldersList;
-    // bool private init = false;
     address public sharesIssuerAddress;
+    address public companySecrectaryAddress;
     bytes32 public companyType = keccak256("PRIVATE");
-
-    // constructor(address[] memory boardMembers, uint256[] memory shares, string memory name, string memory symbol, address factoryAddress){
-    //     console.log("Contract Deployer : ",msg.sender);
-    //     // _setupRole(keccak256("DEFAULT_ADMIN_ROLE"), msg.sender);
-    //     _setBoardMembers(boardMembers,shares);
-    //     _setupRole(COMPANY_MODERATOR_ROLE, msg.sender);
-    //     _createSharesIssuer(name,symbol,factoryAddress,boardMembers,shares);
-    // }
-
     function initialize(address[] memory boardMembers, uint256[] memory shares, string memory name, string memory symbol, address factoryAddress) public initializer {
         console.log("Contract Deployer : ",msg.sender);
         // _setupRole(keccak256("DEFAULT_ADMIN_ROLE"), msg.sender);
@@ -48,7 +39,7 @@ contract CompanyBoardV1 is AccessControlEnumerable, Initializable {
         }
         // boardMembers = boardMembers;
     }
-    function _createSharesIssuer(string memory name, string memory symbol, address factoryAddress,address[] memory boardMembers, uint256[] memory shares) internal{
+    function _createSharesIssuer(string memory name, string memory symbol, address factoryAddress, address[] memory boardMembers, uint256[] memory shares) internal{
         console.log("Create Shares Issuer : " ,name, symbol, factoryAddress);
         console.log("This Contract Address : ",address(this));
         SharesIssuerFactoryCloneV1 shareIssuerFactoryInstance = SharesIssuerFactoryCloneV1(factoryAddress);
@@ -62,30 +53,6 @@ contract CompanyBoardV1 is AccessControlEnumerable, Initializable {
             sharesInstance.mint(boardMembers[i], shares[i]);
         }
     }
-    // function getSharesIssuerAddress() external view returns(address) {
-    //     return sharesIssuerAddress;
-    // }
-    // function setShareIssuer(address _shareIssuerAddress) external{
-    //     require(hasRole(COMPANY_MODERATOR_ROLE, msg.sender), "Caller is not a Moderator");
-    //     shareIssuerAddress = _shareIssuerAddress;
-    //     renounceRole(COMPANY_MODERATOR_ROLE, msg.sender);
-    // }
-    // function initSharesIssue() external returns (uint) {
-    //     // console.log('sharesIssuer Address :',shareIssuerAddress);
-    //     require(init == false,"Init Share already issued.");
-    //     require(shareIssuerAddress != 0x0000000000000000000000000000000000000000,"Share Issuer not yet already.");
-    //     uint totalMembers = getRoleMemberCount(BOARD_MEMBER_ROLE);
-    //     console.log('Number of Board Members :',totalMembers);
-    //     console.log('sharesIssuer Address :',shareIssuerAddress);
-    //     console.log(Address.isContract(shareIssuerAddress));
-    //     for(uint256 i = 0; i < shareHoldersList.length; i++) {
-    //         ERC20Mint shareInstance = ERC20Mint(shareIssuerAddress);
-    //         console.log('This shareholders proportions : ',sharesDist[shareHoldersList[i]].share);
-    //         shareInstance.mint(shareHoldersList[i], sharesDist[shareHoldersList[i]].share);
-    //     }
-    //     init = true;
-    //     return totalMembers;
-    // }
     // function getVotingWeight(address member, address sharesIssuer) external view returns(uint256){
     //     require(hasRole(BOARD_MEMBER_ROLE, msg.sender), "Caller is not a Board Memeber");
     //     console.log('Shares Belong to the Board Memeber : ',ERC20Mint(sharesIssuer).balanceOf(member));
@@ -94,26 +61,46 @@ contract CompanyBoardV1 is AccessControlEnumerable, Initializable {
     //     console.log('Member Weight : ',quotient);
     //     return quotient;
     // }
-    // Proposal
     /**
      * @dev Grants `DEFAULT_ADMIN_ROLE`, `MINTER_ROLE` and `PAUSER_ROLE` to the
      * account that deploys the contract.
      *
      * See {ERC20-constructor}.
      */
-    // function initProposal() external{
+    // Governance
+    // Proposal - For each proposal register as a NFT
+        // - Content : Tile / Description / Attachment (metadata)
+        // - Passing Rate
+        // - Voting Time : Limit + Instant Pass
+        // - Blind Voting
+        // - Execution Time
+        // - Yes / No Option
+    // function initProposal(uint proposalId, address secrectaryAddress) external returns(bool){
     //     require(hasRole(BOARD_MEMBER_ROLE, msg.sender), "Caller is not a Board Memeber");
+    //     return true;
     // }
-    // Vote
-    // Result
+
+    // Vote : for a specific proposal : proposalId
+        // Checking : 
+        // - Board Member or Delegator or Not 
+        // - Porposal Status
+        // - Vote already or not
+        // - Ballot end or not
+        // Cast Voting / Emit
+    
+    // Ballot Result Declaration by Moderator
 
     // Voting Power Delegation
 
-    // Shares Dilution
-    // Company Liquidation
-    // IPO / ICO
-    // Assets Related (Movement)
-    // Others Proposal
+    // Execution
+        // Memorandum ONLY
+        // Change Company Type
+        // Change Company Secrectary
+        // Shares Dilution
+        // Update BR Metadata
+        // Company Liquidation
+        // IPO / ICO / PO
+        // Assets Related (Movement)
 
     // struct Voter {
     //     uint weight; // weight is accumulated by delegation

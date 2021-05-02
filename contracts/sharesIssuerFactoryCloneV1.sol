@@ -17,9 +17,4 @@ contract SharesIssuerFactoryCloneV1 {
         return clone;
     }
 
-    // function createShareIssuer(string calldata name, string calldata symbol, address owner) external returns (address) {
-    //     address clone = Clones.clone(tokenImplementation);
-    //     SharesIssuerV1(clone).initialize(name, symbol, owner);
-    //     return clone;
-    // }
 }

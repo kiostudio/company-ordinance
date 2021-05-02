@@ -1,21 +1,9 @@
 const { expect } = require("chai");
 const hre = require("hardhat");
-// describe("Greeter", function() {
-//   this.timeout(100000);
-//   it("Should return the new greeting once it's changed", async function() {
-//     const Greeter = await ethers.getContractFactory("Greeter");
-//     const greeter = await Greeter.deploy("Hello, world!");
-    
-//     await greeter.deployed();
-//     expect(await greeter.greet()).to.equal("Hello, world!");
 
-//     await greeter.setGreeting("Hola, mundo!");
-//     expect(await greeter.greet()).to.equal("Hola, mundo!");
-//   });
-// });
-
-describe("Register a new compant", ()=>{
+describe("Register a new company", ()=>{
   it("Should return a deployed address",async()=>{
+    // Get Network Accounts
     const accounts = await hre.ethers.getSigners();
 
     // Company Registration Contract Deployment (ERC721)
@@ -23,6 +11,24 @@ describe("Register a new compant", ()=>{
     const BusinessRegistratioDeployment = await BusinessRegistrationContract.deploy();
     const BusinessRegistration = await BusinessRegistratioDeployment.deployed();
     console.log("Business Registration is Deployed to : ",BusinessRegistration.address);
+
+    // Company Secretary (ERC721) Factory Deployment
+    const CompanySecretaryContract = await hre.ethers.getContractFactory("CompanySecretary721FactoryCloneV1");
+    const CompanySecretaryContractFactoryDeployment = await CompanySecretaryContract.deploy();
+    const CompanySecretaryFactory = await CompanySecretaryContractFactoryDeployment.deployed();
+    console.log("Company Secretary Factory Contract is Deployed to : ",CompanySecretaryFactory.address);
+
+    // Deploy a Shared Secretary
+    const tx0 = await CompanySecretaryFactory.createCompanySecretary(
+      "CompanySecretary",
+      "CR",
+      "https://kios.tech",
+      accounts[0].address
+    );
+    const tx0Res = await tx0.wait();
+    const sharedCompanySecretaryAddress = tx0Res.events.find(Boolean).address;
+    console.log(`Gas Used : ${tx0Res.gasUsed.toString()}`);
+    console.log('Shared Company Secretary Deployed Address',sharedCompanySecretaryAddress);
 
     // Company Shares Issuer Factory Deployment
     const SharesIssuerContractFactory = await hre.ethers.getContractFactory("SharesIssuerFactoryCloneV1");
@@ -37,7 +43,6 @@ describe("Register a new compant", ()=>{
     console.log("Company Board Factory Contract is Deployed to : ",CompanyBoardFactory.address);
 
     // Board of Directors Deployment && Initiate Clone Shares Issuer for this Company Board
-    // const CompanyBoardContract = await hre.ethers.getContractFactory("CompanyBoardV1");
     const tx1 = await CompanyBoardFactory.createCompanyBoard(
       [
         accounts[0].address,
@@ -50,13 +55,14 @@ describe("Register a new compant", ()=>{
     );
     // console.log('TX1 Res : ',tx1);
     const { gasUsed: createGasUsed, events } = await tx1.wait();
-    console.log(events);
+    // console.log(events);
     const { address } = events.find(Boolean);
     console.log(`Gas Used : ${createGasUsed.toString()}`);
 
     // Mint by Contract Owner (OnChain Limited)
+    // Meta Data : Company Board Contract Address + Company Basic Info + Token Id + Address
     const tx2 = await BusinessRegistration.mint(accounts[0].address);
-    console.log('TX2 Res : ',tx2);
+    // console.log('TX2 Res : ',tx2);
     
     const thisCompanyBoard = await ethers.getContractFactory('CompanyBoardV1');
     const companyBoardInstance = new ethers.Contract(address, thisCompanyBoard.interface, accounts[0]);
