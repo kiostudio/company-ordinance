@@ -11,37 +11,50 @@ import "./sharesIssuerFactoryCloneV1.sol";
 // import "@openzeppelin/contracts-upgradeable/token/ERC20/presets/ERC20PresetMinterPauserUpgradeable.sol";
 
 contract CompanyBoardV1 is AccessControlEnumerable, Initializable {
+    /**
+     * @dev Grants `BOARD_MEMBER_ROLE`, `COMPANY_MODERATOR_ROLE` to the
+     * account that deploys the contract.
+     *
+     */
     bytes32 public constant BOARD_MEMBER_ROLE = keccak256("BOARD_MEMBER_ROLE");
     bytes32 public constant COMPANY_MODERATOR_ROLE = keccak256("COMPANY_MODERATOR_ROLE");
     address public sharesIssuerAddress;
     address public companySecrectaryAddress;
-    bytes32 public companyType = keccak256("PRIVATE");
+    uint public constant publicCompany = 0;
+    uint public constant privateCompany = 1;
+    uint public companyType;
 
     struct Voter {
         uint weight; // weight is accumulated by delegation
         address delegate; // person delegated to
         uint vote;   // index of the voted proposal
     }
+    struct Option {
+        uint count;
+    }
     struct Proposal {
         uint id;
-        bytes32 status;
         uint voteCount;
         uint voteOptions;
+        mapping(uint => Option) options;
         uint256 voteEnd;
         uint passRate;
         uint actionIndex;
         uint timelock;
         address secrectaryAddress;
+        address [] voteAddresses;
         mapping(address => Voter) voters;
     }
-    Proposal [] private Proposals;
-    // mapping (bytes32 => Proposal) proposals;
+    uint numProposals;
+    // Proposal [] private Proposals;
+    mapping (uint => Proposal) Proposals;
 
-    function initialize(address[] memory boardMembers, uint256[] memory shares, string memory name, string memory symbol, address factoryAddress) public initializer {
+    function initialize(address[] memory boardMembers, uint256[] memory shares, string memory name, string memory symbol, address factoryAddress, address moderator) public initializer {
         console.log("Contract Deployer : ",msg.sender);
         // _setupRole(keccak256("DEFAULT_ADMIN_ROLE"), msg.sender);
+        companyType = privateCompany;
         _setBoardMembers(boardMembers);
-        // _setupRole(COMPANY_MODERATOR_ROLE, msg.sender);
+        _setupRole(COMPANY_MODERATOR_ROLE, moderator);
         _createSharesIssuer(name,symbol,factoryAddress,boardMembers,shares);
     }
     function _setBoardMembers(address[] memory boardMembers) internal{
@@ -76,12 +89,6 @@ contract CompanyBoardV1 is AccessControlEnumerable, Initializable {
     //     console.log('Member Weight : ',quotient);
     //     return quotient;
     // }
-    /**
-     * @dev Grants `DEFAULT_ADMIN_ROLE`, `MINTER_ROLE` and `PAUSER_ROLE` to the
-     * account that deploys the contract.
-     *
-     * See {ERC20-constructor}.
-     */
     // Governance
     // Proposal - For each proposal register as a NFT
         // - Content : Tile / Description / Attachment / Vote Options (metadata)
@@ -93,9 +100,8 @@ contract CompanyBoardV1 is AccessControlEnumerable, Initializable {
         // - Yes / No Option
     function initProposal(uint proposalId, address secrectaryAddress, uint voteOptions, uint voteTime, uint passRate, uint actionIndex, uint timelock) external{
         require(hasRole(BOARD_MEMBER_ROLE, msg.sender), "Caller is not a Board Memeber");
-        Proposal storage proposal = Proposals[Proposals.length+1];
+        Proposal storage proposal = Proposals[numProposals++];
         proposal.id = proposalId;
-        proposal.status = "open";
         proposal.voteCount = 0;
         proposal.voteOptions = voteOptions;
         proposal.voteEnd = block.timestamp + voteTime * 1 days;
@@ -103,37 +109,107 @@ contract CompanyBoardV1 is AccessControlEnumerable, Initializable {
         proposal.actionIndex = actionIndex;
         proposal.timelock = timelock;
         proposal.secrectaryAddress = secrectaryAddress;
+        for(uint256 i = 0; i < voteOptions; i++) {
+            proposal.options[i] = Option({
+                count : 0
+            });
+        }
     }
 
     function vote(uint proposalId, address secrectaryAddress, uint voteIndex) external{
         require(hasRole(BOARD_MEMBER_ROLE, msg.sender), "Caller is not a Board Memeber");
-        for(uint256 i = 0; i < Proposals.length; i++) {
+        SharesIssuerV1 sharesInstance = SharesIssuerV1(sharesIssuerAddress);
+        for(uint256 i = 0; i < numProposals; i++) {
             if(Proposals[i].id == proposalId && Proposals[i].secrectaryAddress == secrectaryAddress){
                 require(voteIndex <= Proposals[i].voteOptions, "Vote option is not valid");
-                SharesIssuerV1 sharesInstance = SharesIssuerV1(sharesIssuerAddress);  
+                require(Proposals[i].voteEnd > block.timestamp, "Ballot is already ended");
                 uint voterWeight = uint(sharesInstance.balanceOf(msg.sender));
                 Proposals[i].voteCount = Proposals[i].voteCount + voterWeight;
+                bool voteAlready = false;
+                for(uint256 j = 0; j < Proposals[i].voteAddresses.length; j++) {
+                    if(Proposals[i].voteAddresses[j] == msg.sender) voteAlready = true;
+                }
+                require(voteAlready == false, "Vote already");
+                Proposals[i].voteAddresses.push(msg.sender);
                 Voter storage voter = Proposals[i].voters[msg.sender]; 
                 voter.vote = voteIndex;
                 voter.delegate = msg.sender;
                 voter.weight = voterWeight;               
-                // Proposals[i].voters[msg.sender] = Voter({
-                //     vote: voteIndex,
-                //     delegate: msg.sender,
-                //     weight: voterWeight
-                // });
+                Proposals[i].voters[msg.sender] = Voter({
+                    vote: voteIndex,
+                    delegate: msg.sender,
+                    weight: voterWeight
+                });
+                Proposals[i].options[voteIndex].count = Proposals[i].options[voteIndex].count + voterWeight;
+                // Check whether the updated vote result fulfill the passing rate
+                if(Proposals[i].voteCount >= sharesInstance.totalSupply() * Proposals[i].passRate / 100){
+                    console.log('Pass the passing rate');
+                    // Vote Count : Find Winning Options
+                    uint _winResult = 0;
+                    uint winningVoteCount = 0;
+                    for(uint256 h = 0; h < Proposals[i].voteOptions; h++) {
+                        console.log("Option Index : ",h);
+                        console.log("Vote Count : ",Proposals[i].options[h].count);
+                        if (Proposals[i].options[h].count > _winResult) {
+                            winningVoteCount = Proposals[i].options[h].count;
+                            _winResult = h;
+                        }
+                    }
+                    console.log('Winning Result Index : ',_winResult);
+                    if(_winResult == 0){
+                        console.log('Winning to Change the Company Type');
+                        // Execute that Voting Action
+                        if(Proposals[i].actionIndex == 1){
+                            // bytes32 public companyType = keccak256("PRIVATE");
+                            if(companyType == publicCompany){
+                                companyType = privateCompany;
+                            } else {
+                                companyType = publicCompany;
+                            }
+                        }
+                    }
+                } 
+                // else {
+                //     console.log('Not Yet pass the passing rate');
+                // }
             }
         }
-        // Voter storage sender = voters[msg.sender];
-        // require(sender.weight != 0, "Has no right to vote");
-        // require(!sender.voted, "Already voted.");
-        // sender.voted = true;
-        // sender.vote = proposal;
+    }
 
-        // // If `proposal` is out of the range of the array,
-        // // this will throw automatically and revert all
-        // // changes.
-        // proposals[proposal].voteCount += sender.weight;
+    // function endProposal(uint proposalId, address secrectaryAddress) external{
+    //     require(hasRole(COMPANY_MODERATOR_ROLE, msg.sender), "Caller is not a Board Moderator");
+    //     for(uint256 i = 0; i < numProposals; i++) {
+    //         if(Proposals[i].id == proposalId && Proposals[i].secrectaryAddress == secrectaryAddress){
+    //             console.log('Now : ', block.timestamp);
+    //             console.log('Vote End : ', Proposals[i].voteEnd);
+    //             require(Proposals[i].voteEnd >= block.timestamp,"Ballot is not yet end");
+    //             Proposals[i].status = 1;
+    //         }
+    //     }
+    // }
+
+    function proposalResult(uint proposalId, address secrectaryAddress) view external returns(uint voteCount, bool voteIsEnd, bool voteTimeEnd, bool voteHasResult, uint winResult){
+        require(hasRole(BOARD_MEMBER_ROLE, msg.sender), "Caller is not a Board Memeber");
+        SharesIssuerV1 sharesInstance = SharesIssuerV1(sharesIssuerAddress);
+        for(uint256 i = 0; i < numProposals; i++) {
+            if(Proposals[i].id == proposalId && Proposals[i].secrectaryAddress == secrectaryAddress){
+                bool _voteTimeEnd = block.timestamp >= Proposals[i].voteEnd;
+                bool _voteHasResult = Proposals[i].voteCount >= sharesInstance.totalSupply() * Proposals[i].passRate / 100;
+                bool _voteIsEnd = _voteTimeEnd || _voteHasResult;
+                uint _winResult = 0;
+                uint winningVoteCount = 0;
+                for(uint256 j = 0; j < Proposals[i].voteOptions; j++) {
+                    console.log("Option Index : ",j);
+                    console.log("Vote Count : ",Proposals[i].options[j].count);
+                    if (Proposals[i].options[j].count > _winResult) {
+                        winningVoteCount = Proposals[i].options[j].count;
+                        _winResult = j;
+                    }
+                }
+                console.log('Winning Result Index : ',_winResult);
+                return(Proposals[i].voteCount,_voteIsEnd,_voteTimeEnd,_voteHasResult,_winResult);
+            }
+        }
     }
 
     // Vote : for a specific proposal : proposalId
@@ -149,163 +225,12 @@ contract CompanyBoardV1 is AccessControlEnumerable, Initializable {
     // Voting Power Delegation
 
     // Execution
-        // Memorandum ONLY
-        // Change Company Type
+        // Memorandum ONLY - 0
+        // Change Company Type - 1
         // Change Company Secrectary
         // Shares Dilution
         // Update BR Metadata
         // Company Liquidation
         // IPO / ICO / PO
         // Assets Related (Movement)
-
-    // struct Voter {
-    //     uint weight; // weight is accumulated by delegation
-    //     bool voted;  // if true, that person already voted
-    //     address delegate; // person delegated to
-    //     uint vote;   // index of the voted proposal
-    // }
-
-    // // This is a type for a single proposal.
-    // struct Proposal {
-    //     bytes32 name;   // short name (up to 32 bytes)
-    //     uint voteCount; // number of accumulated votes
-    // }
-
-    // // address public chairperson;
-
-    // // This declares a state variable that
-    // // stores a `Voter` struct for each possible address.
-    // mapping(address => Voter) public voters;
-
-    // // A dynamically-sized array of `Proposal` structs.
-    // Proposal[] public proposals;
-
-    // // function getBoardMembers() public returns (address[] memory) {
-    // //     return boardMembers;
-    // // }
-
-    // /// Create a new ballot to choose one of `proposalNames`.
-    // // constructor(bytes32[] memory proposalNames) {
-    // //     chairperson = msg.sender;
-    // //     voters[chairperson].weight = 1;
-
-    // //     // For each of the provided proposal names,
-    // //     // create a new proposal object and add it
-    // //     // to the end of the array.
-    // //     for (uint i = 0; i < proposalNames.length; i++) {
-    // //         // `Proposal({...})` creates a temporary
-    // //         // Proposal object and `proposals.push(...)`
-    // //         // appends it to the end of `proposals`.
-    // //         proposals.push(Proposal({
-    // //             name: proposalNames[i],
-    // //             voteCount: 0
-    // //         }));
-    // //     }
-    // // }
-
-    // // function createProposal(address owner, bytes32[] memory proposalName) public{
-    // //     require(hasRole(BOARD_MEMBER_ROLE, msg.sender), "Caller is not a Board Memeber");
-    // // }
-
-    // // Give `voter` the right to vote on this ballot.
-    // // May only be called by `chairperson`.
-    // function giveRightToVote(address voter) public {
-    //     // If the first argument of `require` evaluates
-    //     // to `false`, execution terminates and all
-    //     // changes to the state and to Ether balances
-    //     // are reverted.
-    //     // This used to consume all gas in old EVM versions, but
-    //     // not anymore.
-    //     // It is often a good idea to use `require` to check if
-    //     // functions are called correctly.
-    //     // As a second argument, you can also provide an
-    //     // explanation about what went wrong.
-    //     // require(
-    //     //     msg.sender == chairperson,
-    //     //     "Only chairperson can give right to vote."
-    //     // );
-    //     require(
-    //         !voters[voter].voted,
-    //         "The voter already voted."
-    //     );
-    //     require(voters[voter].weight == 0);
-    //     voters[voter].weight = 1;
-    // }
-
-    // /// Delegate your vote to the voter `to`.
-    // function delegate(address to) public {
-    //     // assigns reference
-    //     Voter storage sender = voters[msg.sender];
-    //     require(!sender.voted, "You already voted.");
-
-    //     require(to != msg.sender, "Self-delegation is disallowed.");
-
-    //     // Forward the delegation as long as
-    //     // `to` also delegated.
-    //     // In general, such loops are very dangerous,
-    //     // because if they run too long, they might
-    //     // need more gas than is available in a block.
-    //     // In this case, the delegation will not be executed,
-    //     // but in other situations, such loops might
-    //     // cause a contract to get "stuck" completely.
-    //     while (voters[to].delegate != address(0)) {
-    //         to = voters[to].delegate;
-
-    //         // We found a loop in the delegation, not allowed.
-    //         require(to != msg.sender, "Found loop in delegation.");
-    //     }
-
-    //     // Since `sender` is a reference, this
-    //     // modifies `voters[msg.sender].voted`
-    //     sender.voted = true;
-    //     sender.delegate = to;
-    //     Voter storage delegate_ = voters[to];
-    //     if (delegate_.voted) {
-    //         // If the delegate already voted,
-    //         // directly add to the number of votes
-    //         proposals[delegate_.vote].voteCount += sender.weight;
-    //     } else {
-    //         // If the delegate did not vote yet,
-    //         // add to her weight.
-    //         delegate_.weight += sender.weight;
-    //     }
-    // }
-
-    // /// Give your vote (including votes delegated to you)
-    // /// to proposal `proposals[proposal].name`.
-    // function vote(uint proposal) public {
-    //     Voter storage sender = voters[msg.sender];
-    //     require(sender.weight != 0, "Has no right to vote");
-    //     require(!sender.voted, "Already voted.");
-    //     sender.voted = true;
-    //     sender.vote = proposal;
-
-    //     // If `proposal` is out of the range of the array,
-    //     // this will throw automatically and revert all
-    //     // changes.
-    //     proposals[proposal].voteCount += sender.weight;
-    // }
-
-    // /// @dev Computes the winning proposal taking all
-    // /// previous votes into account.
-    // function winningProposal() public view
-    //         returns (uint winningProposal_)
-    // {
-    //     uint winningVoteCount = 0;
-    //     for (uint p = 0; p < proposals.length; p++) {
-    //         if (proposals[p].voteCount > winningVoteCount) {
-    //             winningVoteCount = proposals[p].voteCount;
-    //             winningProposal_ = p;
-    //         }
-    //     }
-    // }
-
-    // // Calls winningProposal() function to get the index
-    // // of the winner contained in the proposals array and then
-    // // returns the name of the winner
-    // function winnerName() public view
-    //         returns (bytes32 winnerName_)
-    // {
-    //     winnerName_ = proposals[winningProposal()].name;
-    // }
 }

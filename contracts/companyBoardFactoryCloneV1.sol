@@ -11,9 +11,9 @@ contract CompanyBoardFactoryCloneV1 {
         tokenImplementation = address(new CompanyBoardV1());
     }
 
-    function createCompanyBoard(address[] memory boardMembers, uint256[] memory shares, string memory name, string memory symbol, address factoryAddress) external returns (address) {
+    function createCompanyBoard(address[] memory boardMembers, uint256[] memory shares, string memory name, string memory symbol, address factoryAddress, address moderator) external returns (address) {
         address clone = Clones.clone(tokenImplementation);
-        CompanyBoardV1(clone).initialize(boardMembers, shares, name, symbol, factoryAddress);
+        CompanyBoardV1(clone).initialize(boardMembers, shares, name, symbol, factoryAddress, moderator);
         return clone;
     }
 

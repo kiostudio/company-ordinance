@@ -42,7 +42,7 @@ describe("Register a new company", ()=>{
     const CompanyBoardFactory = await CompanyBoardContractFactoryDeployment.deployed();
     console.log("Company Board Factory Contract is Deployed to : ",CompanyBoardFactory.address);
 
-    // Board of Directors Deployment && Initiate Clone Shares Issuer for this Company Board
+    // Board of Directors Deployment && Initiate Clone Shares Issuer for this Company Board && Mint Shares
     const tx1 = await CompanyBoardFactory.createCompanyBoard(
       [
         accounts[0].address,
@@ -51,96 +51,105 @@ describe("Register a new company", ()=>{
       [1000,2000],
       "Shares",
       "SHARE",
-      SharesIssuerFactory.address
+      SharesIssuerFactory.address,
+      accounts[0].address
     );
     // console.log('TX1 Res : ',tx1);
     const { gasUsed: createGasUsed, events } = await tx1.wait();
-    // console.log(events);
     const { address } = events.find(Boolean);
     console.log(`Gas Used : ${createGasUsed.toString()}`);
 
-    // Mint by Contract Owner (OnChain Limited)
-    // Meta Data : Company Board Contract Address + Company Basic Info + Token Id + Address
+    // Create a Business Registration
     const tx2 = await BusinessRegistration.mint(accounts[0].address);
     // console.log('TX2 Res : ',tx2);
-    
+
+    // Check Whether Balance is Correct or Not
     const thisCompanyBoard = await ethers.getContractFactory('CompanyBoardV1');
     const companyBoardInstance = new ethers.Contract(address, thisCompanyBoard.interface, accounts[0]);
     const sharesIssuerAddress = await companyBoardInstance.sharesIssuerAddress();
     console.log('Share Issuer Address : ',sharesIssuerAddress);
-
-    // console.log('Share Issuer Address : ',CompanyBoardFactory.getSharesIssuerAddress());
-    // const CompanyBoard = await CompanyBoardContractDeployment.deployed();
-    // console.log("CompanyBoard is Deployed to : ",CompanyBoard.address);
-
-    // const tx1 = await ERC20Factory.createToken("Shares","SHARE",CompanyBoard.address);
-    // console.log('Create Token Res : ',tx1);
-    // const { gasUsed: createGasUsed, events } = await tx1.wait();
-    // const { address } = events.find(Boolean);
-    // console.log(`Gas Used : ${createGasUsed.toString()}`);
-    // console.log(`Share Issuer Address : ${address}`);
-    // const ERC20UpgradeableContract = await hre.ethers.getContractFactory("ERC20Mint");
-
-    // Set Share Issuer in the Company Board
-    // const tx2 = await CompanyBoard.setShareIssuer(address);
-    // console.log('TX2 Res : ',tx2);
-
-    // Initial Shares Issue
-    // const tx3 = await CompanyBoard.initSharesIssue();
-    // console.log('TX3 Res : ',tx3);
-
     let { interface } = await ethers.getContractFactory('SharesIssuerV1');
     const instance = new ethers.Contract(sharesIssuerAddress, interface, accounts[0]);
     console.log("Account balance:", (await instance.balanceOf(accounts[0].address)).toString());
     console.log("Account balance:", (await instance.balanceOf(accounts[1].address)).toString());
-    
-    // const tx3 = await CompanyBoard.initSharesIssue(address);
-    // console.log('TX3 Res : ',tx3);
-    // const { gasUsed: createGasUsed, events } = await tx2.wait();
-    // const { interface } = await ethers.getContractFactory('ERC20Mint');
-    // const instance = new ethers.Contract(address, interface, accounts[0]);
 
-    // const tx4 = await CompanyBoard.getVotingWeight(accounts[0].address,address);
-    // console.log('TX4 Res : ',tx4.toString()/1000);
-    // const tx5 = await CompanyBoard.getVotingWeight(accounts[1].address,address);
-    // console.log('TX5 Res : ',tx5.toString()/1000);
+    const tx12 = await companyBoardInstance.companyType();
+    console.log('Company Type Before Voting for a Proposal',tx12.toString());
+
+    // Initiate a Proposal
+    const thisCompanySecrectary = await ethers.getContractFactory('CompanySecretary721V1');
+    const companySecrectaryInstance = new ethers.Contract(sharedCompanySecretaryAddress, thisCompanySecrectary.interface, accounts[0]);
+    const tx3 = await companySecrectaryInstance.mint(address);
+    // console.log(tx3);
+    // const tx3Res = await tx3.wait();
+    // console.log(tx3Res.events);
+    const tx4 = await companySecrectaryInstance.balanceOf(address);
+    const tx5 = await companySecrectaryInstance.tokenOfOwnerByIndex(address,tx4.toString()-1);
+    console.log('Latest Proposal Token Id :',tx5.toString());
+    const tx6 = await companyBoardInstance.initProposal(tx5.toString(), sharedCompanySecretaryAddress, 2, 3, 50, 1, 2);
+    // Change the company Type to a Public Company
+    const { gasUsed: createGasUsedTx6 } = await tx6.wait();
+    console.log('Gas Used : ',createGasUsedTx6.toString());
+
+    // Vote for a Proposal By Address 0
+    const tx7 = await companyBoardInstance.vote(tx5.toString(),sharedCompanySecretaryAddress,0);
+    const { gasUsed: createGasUsedTx7 } = await tx7.wait();
+    console.log('Gas Used : ',createGasUsedTx7.toString());
+
+    // Check Vote Count
+    const tx8 = await companyBoardInstance.proposalResult(tx5.toString(),sharedCompanySecretaryAddress);
+    console.log('Vote Count : ',tx8.toString());
+
+    // Vote for a Proposal By Address 1
+    const companyBoardInstance1 = new ethers.Contract(address, thisCompanyBoard.interface, accounts[1]);
+    const tx9 = await companyBoardInstance1.vote(tx5.toString(),sharedCompanySecretaryAddress,0);
+    const { gasUsed: createGasUsedTx9 } = await tx9.wait();
+    console.log('Gas Used : ',createGasUsedTx9.toString());
+
+    // Check Vote Count
+    const tx10 = await companyBoardInstance1.proposalResult(tx5.toString(),sharedCompanySecretaryAddress);
+    console.log('Vote Count : ',tx10.toString());
+    // console.log('Vote Status : ',tx10.status.toString());
+
+    // Get Execute Result
+    const tx11 = await companyBoardInstance.companyType();
+    console.log('Company Type After Voting for a Proposal',tx11.toString());
+
+    // Check Proposal Result
+    // const tx11 = await companyBoardInstance.endProposal(tx5.toString(),sharedCompanySecretaryAddress);
+    // const { gasUsed: createGasUsedTx11 } = await tx11.wait();
+    // console.log('Gas Used : ',createGasUsedTx11.toString());
+
+
+    // const tx4 = await companySecrectaryInstance.mint(accounts[2].address);
+    // // console.log(tx3);
+    // const tx4Res = await tx4.wait();
+    // // console.log(tx4Res.events);
+
+    // const tx7 = await companySecrectaryInstance.mint(address);
+    // const tx7Res = await tx7.wait();
+
+    // const tx5 = await companySecrectaryInstance.balanceOf(address);
+    // console.log(tx5.toString());
+
+    // const tx6 = await companySecrectaryInstance.balanceOf(accounts[2].address);
+    // console.log(tx6.toString());
+
+    // const tx9 = await companySecrectaryInstance.tokenOfOwnerByIndex(address,tx5.toString()-1);
+    // console.log(tx9.toString());
+
+    // const tx10 = await companySecrectaryInstance.tokenOfOwnerByIndex(address,tx5.toString()-2);
+    // console.log(tx10.toString());
+
+    // const tx8 = await companySecrectaryInstance.totalSupply();
+    // console.log(tx8.toString());
+
+    // const tx6 = await companySecrectaryInstance.tokenOfOwnerByIndex(address,0);
+    // console.log(tx6.toString());
+    // const tx7 = await companySecrectaryInstance.tokenOfOwnerByIndex(address,1);
+    // console.log(tx7.toString());
+    
+
 
   });
 });
-
-// describe("Deploy ERC Factory",()=>{
-//     it("Should return a deployed address",async()=>{
-
-//       // Deploy ERC20 Clone Factory
-//       // const ERC20ContractFactory = await hre.ethers.getContractFactory("FactoryClone");
-//       // const ERC20ContractFactoryDeployment = await ERC20ContractFactory.deploy();
-//       // const ERC20Factory = await ERC20ContractFactoryDeployment.deployed();
-//       // console.log("ERC20 Factory Contract is Deployed to : ",ERC20Factory.address);
-
-//       // const accounts = await hre.ethers.getSigners();
-//       // console.log('Accounts',accounts[0].address);
-
-//       // const tx1 = await ERC20Factory.createToken("TestToken","Test",accounts[0].address);
-//       // // console.log('Create Token Res : ',tx1);
-//       // const { gasUsed: createGasUsed, events } = await tx1.wait();
-//       // const { address } = events.find(Boolean);
-//       // console.log(`Gas Used : ${createGasUsed.toString()}`);
-//       // // const ERC20UpgradeableContract = await hre.ethers.getContractFactory("ERC20Mint");
-
-//       // const { interface } = await ethers.getContractFactory('ERC20Mint');
-//       // const instance = new ethers.Contract(address, interface, accounts[0]);
-
-//       // const tx2 = await instance.getRoleMember(instance.MINTER_ROLE(),0);
-//       // console.log('Contract Owner / Minter',tx2);
-//       // const tx3 = await instance.getRoleMember(instance.MINTER_ROLE(),1);
-//       // console.log('Contract Owner / Minter',tx3);
-//       // // const tx2 = await instance.grantRole(instance.MINTER_ROLE(), accounts[0].address);
-//       // // console.log('Grant Role Res : ',tx2);
-//       // const tx4 = await instance.mint(accounts[0].address, 100);
-//       // const { gasUsed: mintGasUsed } = await tx4.wait();
-//       // console.log(`ERC20.Mint: ${mintGasUsed.toString()}`);
-
-//       // console.log("Account balance:", (await instance.balanceOf(accounts[0].address)).toString());
-
-//     });
-// });
