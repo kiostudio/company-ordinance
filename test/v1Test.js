@@ -42,6 +42,10 @@ describe("Register a new company", ()=>{
     const CompanyBoardFactory = await CompanyBoardContractFactoryDeployment.deployed();
     console.log("Company Board Factory Contract is Deployed to : ",CompanyBoardFactory.address);
 
+    // Create a Business Registration
+    const tx2 = await BusinessRegistration.mint(accounts[0].address);
+    // console.log('TX2 Res : ',tx2);
+
     // Board of Directors Deployment && Initiate Clone Shares Issuer for this Company Board && Mint Shares
     const tx1 = await CompanyBoardFactory.createCompanyBoard(
       [
@@ -58,10 +62,14 @@ describe("Register a new company", ()=>{
     const { gasUsed: createGasUsed, events } = await tx1.wait();
     const { address } = events.find(Boolean);
     console.log(`Gas Used : ${createGasUsed.toString()}`);
+    console.log('Company Board Address : ',address);
 
-    // Create a Business Registration
-    const tx2 = await BusinessRegistration.mint(accounts[0].address);
-    // console.log('TX2 Res : ',tx2);
+    // Transfer the Business Registratin Certificate to the Board
+    const tx13 = await BusinessRegistration.transferFrom(accounts[0].address,address,0);
+    const { gasUsed: createGasUsedTx13 } = await tx13.wait();
+    console.log('Gas Used : ',createGasUsedTx13.toString());
+    const tx14 = await BusinessRegistration.ownerOf(0);
+    console.log('Company Board now owned the Business Registration Certificates : ',tx14.toString());
 
     // Check Whether Balance is Correct or Not
     const thisCompanyBoard = await ethers.getContractFactory('CompanyBoardV1');
