@@ -1,6 +1,7 @@
 require("@nomiclabs/hardhat-waffle");
 require('dotenv').config();
 require("hardhat-gas-reporter");
+require('hardhat-abi-exporter');
 
 // This is a sample Hardhat task. To learn how to create your own go to
 // https://hardhat.org/guides/create-task.html
@@ -46,6 +47,13 @@ module.exports = {
     enabled : true,
     currency : 'HKD',
     coinmarketcap : 'd257db5e-d4f5-4e47-8b93-b0d38c0c076b'
+  },
+  abiExporter: {
+    path: './abi',
+    clear: true,
+    flat: true,
+    only: ['companyRegistration'],
+    spacing: 2
   }
 };
 
