@@ -40,7 +40,11 @@ module.exports = {
     },
     ropsten: {
       url: "https://ropsten.infura.io/v3/"+process.env.INFURA_KEY,
-      accounts: [process.env.ROPSTEN_ACCOUNT]
+      accounts: [process.env.ETH_ACCOUNT]
+    },
+    rinkeby : {
+      url: "https://rinkeby.infura.io/v3/"+process.env.INFURA_KEY,
+      accounts: [process.env.ETH_ACCOUNT]
     }
   },
   gasReporter : {
